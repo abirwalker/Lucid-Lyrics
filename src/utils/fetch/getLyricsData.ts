@@ -5,7 +5,7 @@ import { processLyrics } from '@/utils/lyrics/processLyrics.ts';
 import { logger } from '@logger';
 
 // List of APIs
-const API_CONSUMERS = ['https://spicetify-projects.sanooj.uk'];
+const API_CONSUMERS = ['https://15omyd-dp-wtiggl2t59lafv0o-wdelivery-external.spicylyrics.org'];
 if (appStore.getState().isDevMode) API_CONSUMERS.unshift('http://localhost:8787');
 console.log(API_CONSUMERS);
 
