@@ -77,7 +77,7 @@ const main = async () => {
   );
   addLyricsToNPV();
 
-  setupAnalytics();
+  // setupAnalytics();
 
   addThemeSpecificStyles();
 };
