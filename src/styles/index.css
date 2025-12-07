@@ -93,10 +93,6 @@
 
   .now-playing-widget {
     left: -100%;
-
-    transition:
-      left 0.3s,
-      right 0.3s;
   }
 
   &.show-now-playing-widget {

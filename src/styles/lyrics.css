@@ -102,7 +102,7 @@ body.player-floating {
   left: 0;
   right: 0;
 
-  transition: all 0.3s ease;
+  transition: left 0.3s ease;
 }
 
 .status-wrapper {
