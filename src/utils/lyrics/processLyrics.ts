@@ -18,6 +18,8 @@ export async function processLyrics(lyric: BestAvailableLyrics): Promise<BestAva
       return txt;
     });
 
+    console.log(lyric);
+
     return lyric;
   } catch (e) {
     logger.trace(e);

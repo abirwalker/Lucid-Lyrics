@@ -5,6 +5,14 @@ import seekTo from '@/utils/player/seekTo.ts';
 import { useCallback, useEffect, useMemo, useRef } from 'react';
 import { useStore } from 'zustand';
 
+const splitIntoGraphemes = (text: string): string[] => {
+  if (typeof Intl !== 'undefined' && 'Segmenter' in Intl) {
+    const segmenter = new Intl.Segmenter(undefined, { granularity: 'grapheme' });
+    return Array.from(segmenter.segment(text)).map((s) => s.segment);
+  }
+  return Array.from(text);
+};
+
 type LayoutElement = {
   text: string;
   x: number;
@@ -38,7 +46,8 @@ type CanvasLyricsProps = {
 };
 
 const CONFIG = {
-  FONT_FAMILY: 'LucidLyrics',
+  FONT_FAMILY:
+    'LucidLyrics, Poppins, "Noto Sans", "Noto Sans Devanagari", "Mukta", "CircularSp-Arab", "CircularSp-Hebr", "CircularSp-Cyrl", "CircularSp-Grek", "CircularSp-Deva", sans-serif',
   FONT_SIZE_LEAD_BASE: 36,
   FONT_SIZE_BG_BASE: 24,
   FONT_SIZE_INTERLUDE_DOT: 16,
@@ -320,6 +329,7 @@ const SyllableLyricsOnCanvas: React.FC<CanvasLyricsProps> = ({ data }) => {
         words.forEach((word) => {
           const spaceWidth = measureTextWidth(' ', fontToUse);
           wordGroup++;
+
           if (word.width > availableWidth) {
             if (lineElements.length > 0) pushLine();
             word.syllables.forEach((s) => {
@@ -329,11 +339,15 @@ const SyllableLyricsOnCanvas: React.FC<CanvasLyricsProps> = ({ data }) => {
               const duration = end - start;
               const fontHeight = isLead ? fontSizes.lead : fontSizes.bg;
               maxLineHeight = Math.max(maxLineHeight, fontHeight);
-              text.split('').forEach((letter, lIdx) => {
+
+              const graphemes = splitIntoGraphemes(text);
+              graphemes.forEach((letter, lIdx) => {
                 const letterWidth = measureTextWidth(letter, fontToUse);
                 if (currentX + letterWidth > availableWidth && currentX > 0) pushLine();
-                const fractionStart = lIdx / text.length;
-                const fractionEnd = (lIdx + 1) / text.length;
+
+                const fractionStart = lIdx / graphemes.length;
+                const fractionEnd = (lIdx + 1) / graphemes.length;
+
                 const element = createTextElement(
                   letter,
                   start + fractionStart * duration,
@@ -351,6 +365,7 @@ const SyllableLyricsOnCanvas: React.FC<CanvasLyricsProps> = ({ data }) => {
           } else {
             if (currentX > 0 && currentX + spaceWidth + word.width > availableWidth) pushLine();
             if (currentX > 0) currentX += spaceWidth;
+
             word.syllables.forEach((s) => {
               const fontHeight = isLead ? fontSizes.lead : fontSizes.bg;
               maxLineHeight = Math.max(maxLineHeight, fontHeight);
@@ -358,7 +373,9 @@ const SyllableLyricsOnCanvas: React.FC<CanvasLyricsProps> = ({ data }) => {
               const end = s.EndTime * 1000;
               const duration = end - start;
               const text = forceRomanized && s.RomanizedText ? s.RomanizedText : s.Text;
-              if (duration < splitThresholdMs || text.length === 1) {
+
+              const graphemes = splitIntoGraphemes(text);
+              if (duration < splitThresholdMs || graphemes.length === 1) {
                 const element = createTextElement(
                   text,
                   start,
@@ -371,9 +388,9 @@ const SyllableLyricsOnCanvas: React.FC<CanvasLyricsProps> = ({ data }) => {
                 lineElements.push(element);
                 currentX += element.width;
               } else {
-                text.split('').forEach((letter, lIdx) => {
-                  const fractionStart = lIdx / text.length;
-                  const fractionEnd = (lIdx + 1) / text.length;
+                graphemes.forEach((letter, lIdx) => {
+                  const fractionStart = lIdx / graphemes.length;
+                  const fractionEnd = (lIdx + 1) / graphemes.length;
                   const element = createTextElement(
                     letter,
                     start + fractionStart * duration,
@@ -396,7 +413,9 @@ const SyllableLyricsOnCanvas: React.FC<CanvasLyricsProps> = ({ data }) => {
 
       if (content.Lead) processPart(content.Lead, true, blockGroup);
       if (content.Background)
-        content.Background.forEach((bgPart) => processPart(bgPart, false, blockGroup));
+        content.Background.forEach((bgPart) => {
+          processPart(bgPart, false, blockGroup);
+        });
       lastEndTime = currentBlockEndTime * 1000;
     });
 
@@ -489,6 +508,12 @@ const SyllableLyricsOnCanvas: React.FC<CanvasLyricsProps> = ({ data }) => {
     });
     groupBoundingBoxesRef.current = boxes;
   }, [data, forceRomanized, maxTranslateUpLetter, maxTranslateUpWord, splitThresholdMs]);
+
+  useEffect(() => {
+    document.fonts.ready.then(() => {
+      recalculateLayout();
+    });
+  }, [recalculateLayout]);
 
   const enableAutoScroll = useCallback(() => {
     isAutoScrollDisabled.current = false;
