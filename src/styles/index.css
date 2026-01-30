@@ -19,7 +19,7 @@
   --lucid-lyrics-credits-scale: 0.47;
 
   --lucid-lyrics-font-family:
-    Poppins, "SF Pro", LucidLyrics, Poppins, "Noto Sans", "Noto Sans Devanagari", "Mukta", "CircularSp-Arab", "CircularSp-Hebr", "CircularSp-Cyrl", "CircularSp-Grek", "CircularSp-Deva", var(
+    "SF Pro", LucidLyrics, Poppins, "Noto Sans", "Noto Sans Devanagari", "Mukta", "CircularSp-Arab", "CircularSp-Hebr", "CircularSp-Cyrl", "CircularSp-Grek", "CircularSp-Deva", var(
       --encore-variable-font-stack
     ), sans-serif;
 }
