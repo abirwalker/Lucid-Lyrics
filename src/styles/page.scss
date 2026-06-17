@@ -18,7 +18,7 @@ $floating-transition:
   container-type: inline-size;
   container-name: lucid-page;
   background: transparent;
-  overflow: hidden;
+  overflow: visible;
   font-family: v.$default-fonts;
   color: v.$default-font-color;
   border-radius: inherit;
@@ -236,14 +236,7 @@ $floating-transition:
   height: 100%;
   width: 100%;
 
-  $mask-image: linear-gradient(
-    180deg,
-    transparent 0,
-    #000 var(--top-mask-size, 48px),
-    #000 calc(100% - var(--bottom-mask-size, 48px)),
-    transparent 100%
-  );
-  mask-image: $mask-image;
+  // mask removed — was clipping bloom glow into rectangle
 
   animation: l-page-entry 0.5s v.$ease-bounce 0.15s both;
   transition:
@@ -450,6 +443,7 @@ $floating-transition:
   --lead-font-size: clamp(1.8rem, 4cqw, 3.4rem);
   --lyrics-line-default-padding: 10cqw;
   --lyrics-text-color: 255, 255, 255;
+  overflow: visible;
 
   --bg-font-weight: 600;
   --bg-font-size: calc(var(--lead-font-size) * 0.75);
@@ -477,13 +471,14 @@ $floating-transition:
     --l-blur: 0px;
     --l-scale: 1;
     --l-opacity: 0.6;
+    overflow: visible;
 
     filter: blur(var(--l-blur));
     transform: scale(var(--l-scale));
     opacity: var(--l-opacity);
     transform-origin: center left;
 
-    margin-bottom: calc(clamp(1.8rem, 4cqw, 3.6rem) * 0.5);
+    margin-bottom: var(--line-gap, calc(clamp(1.8rem, 4cqw, 3.6rem) * 0.5));
 
     transition-duration: 0.3s;
     transition-timing-function: cubic-bezier(0.25, 1, 0.5, 1);
@@ -520,6 +515,35 @@ $floating-transition:
     position: relative;
   }
 
+  // Syllable wrapper - base styles (spring-driven transforms applied via JS)
+  .syllable-wrapper {
+    display: inline-block;
+    position: relative;
+    overflow: visible;
+    padding: 0.15rem 0;
+    transform-origin: center center;
+    backface-visibility: hidden;
+    will-change: transform;
+  }
+
+  // Glow via spring-driven CSS custom properties — stacked shadows for rich bloom
+  .syllable.active .syllable-wrapper,
+  .syllable.held-vocal .syllable-wrapper {
+    text-shadow:
+      0 0 calc(var(--text-shadow-blur-radius, 0px) * 0.4) rgba(255, 255, 255, var(--text-shadow-opacity, 0)),
+      0 0 var(--text-shadow-blur-radius, 0px) rgba(255, 255, 255, calc(var(--text-shadow-opacity, 0) * 0.6)),
+      0 0 calc(var(--text-shadow-blur-radius, 0px) * 2) rgba(255, 255, 255, calc(var(--text-shadow-opacity, 0) * 0.3));
+  }
+
+  // Guest singer (v2) glow
+  .syllable-line.v2 .syllable.active .syllable-wrapper,
+  .syllable-line.v2 .syllable.held-vocal .syllable-wrapper {
+    text-shadow:
+      0 0 calc(var(--text-shadow-blur-radius, 0px) * 0.4) rgba(168, 230, 255, var(--text-shadow-opacity, 0)),
+      0 0 var(--text-shadow-blur-radius, 0px) rgba(168, 230, 255, calc(var(--text-shadow-opacity, 0) * 0.6)),
+      0 0 calc(var(--text-shadow-blur-radius, 0px) * 2) rgba(168, 230, 255, calc(var(--text-shadow-opacity, 0) * 0.3));
+  }
+
   .syllable-line {
     position: relative;
     display: block;
@@ -528,7 +552,7 @@ $floating-transition:
     backface-visibility: hidden;
 
     &.has-bg-line {
-      margin-bottom: v.$space-xs;
+      margin-bottom: var(--inner-line-gap, v.$space-xs);
     }
 
     &.background-line {
@@ -580,6 +604,27 @@ $floating-transition:
     background-clip: text;
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
+    backface-visibility: hidden;
+    will-change: transform;
+  }
+
+  // Emphasized letter spans — per-letter spring animation + glow
+  .syllable:has(.char) .char {
+    transform-origin: center center;
+    backface-visibility: hidden;
+    will-change: transform;
+    text-shadow:
+      0 0 calc(var(--text-shadow-blur-radius, 0px) * 0.4) rgba(255, 255, 255, var(--text-shadow-opacity, 0)),
+      0 0 var(--text-shadow-blur-radius, 0px) rgba(255, 255, 255, calc(var(--text-shadow-opacity, 0) * 0.6)),
+      0 0 calc(var(--text-shadow-blur-radius, 0px) * 2) rgba(255, 255, 255, calc(var(--text-shadow-opacity, 0) * 0.3));
+  }
+
+  // v2 guest singer letter glow
+  .syllable-line.v2 .syllable:has(.char) .char {
+    text-shadow:
+      0 0 calc(var(--text-shadow-blur-radius, 0px) * 0.4) rgba(168, 230, 255, var(--text-shadow-opacity, 0)),
+      0 0 var(--text-shadow-blur-radius, 0px) rgba(168, 230, 255, calc(var(--text-shadow-opacity, 0) * 0.6)),
+      0 0 calc(var(--text-shadow-blur-radius, 0px) * 2) rgba(168, 230, 255, calc(var(--text-shadow-opacity, 0) * 0.3));
   }
 
   .line-wrapper.rtl .char {
@@ -680,6 +725,17 @@ $floating-transition:
 
     &.provider {
       font-size: v.$fs-sm;
+    }
+  }
+}
+
+// Motion reduction accessibility - springs auto-disable via SpringAnimator.prefersReducedMotion
+// CSS fallback: disable glow effects
+@media (prefers-reduced-motion: reduce) {
+  .syllable-lyrics {
+    .syllable.held-vocal .syllable-wrapper,
+    .syllable.active .syllable-wrapper {
+      text-shadow: none;
     }
   }
 }
@@ -792,3 +848,4 @@ $floating-transition:
   inherits: false;
   initial-value: 10cqw;
 }
+

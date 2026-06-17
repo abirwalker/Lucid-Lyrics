@@ -16,6 +16,35 @@ import { useRenderer } from "~/context/LyricsRenderer";
 import { SPACE_REGEX, splitGraphemes } from "~/lib/string";
 import { seekTo } from "~/lib/spotify/player";
 import { Interlude } from "~/component/lyrics/Interlude";
+import Spring from "~/lib/Spring";
+import {
+  ScaleSpline,
+  YOffsetSpline,
+  GlowSpline,
+  SyllableSpringConfig,
+  IsEmphasized,
+  Clamp,
+} from "~/lib/SpringConfig";
+
+// Match spicy-card's d3-ease sinOut for letter staggering
+const easeSinOut = (t: number): number => (1 - Math.cos((t * Math.PI) / 2));
+
+type LetterSpringData = {
+  springs: { Scale: Spring; YOffset: Spring; Glow: Spring };
+  el: HTMLSpanElement;
+  start: number;
+  duration: number;
+  glowDuration: number;
+};
+
+type SyllableSpringData = {
+  springs: { Scale: Spring; YOffset: Spring; Glow: Spring };
+  el: HTMLSpanElement;
+  syllable: Syllable;
+  emphasized: boolean;
+  letters: LetterSpringData[];
+  _state?: "active" | "past" | "upcoming";
+};
 
 export type SyllableLyricsProps = {
   lyrics: SyllableData;
@@ -70,6 +99,131 @@ type LeadRendererProps = {
 };
 
 function LeadRenderer(props: LeadRendererProps) {
+  // Spring physics state - shared across all syllables in this line
+  const allSyllableSprings: SyllableSpringData[] = [];
+  let rafId = 0;
+  let lastTime = 0;
+
+  // Match spicy-card: update targets only on state change
+  const updateLiveTextState = (data: SyllableSpringData, timeScale: number, forceTo?: true) => {
+    const { springs: s } = data;
+    const scale = ScaleSpline.at(timeScale);
+    const yOffset = YOffsetSpline.at(timeScale);
+    const glowAlpha = GlowSpline.at(timeScale);
+    if (forceTo) {
+      s.Scale.Set(scale);
+      s.YOffset.Set(yOffset);
+      s.Glow.Set(glowAlpha);
+    } else {
+      s.Scale.Final = scale;
+      s.YOffset.Final = yOffset;
+      s.Glow.Final = glowAlpha;
+    }
+  };
+
+  // Match spicy-card: apply spring values to DOM
+  const updateLiveTextVisuals = (data: SyllableSpringData, timeScale: number, deltaTime: number): boolean => {
+    const { el, springs: s } = data;
+    if (!el) return true;
+    const scale = s.Scale.Update(deltaTime);
+    const yOffset = s.YOffset.Update(deltaTime);
+    const glowAlpha = s.Glow.Update(deltaTime);
+    el.style.transform = `translateY(calc(var(--lyrics-size, 1em) * ${yOffset * (data.emphasized ? 2 : 1)}))`;
+    el.style.scale = scale.toString();
+    el.style.setProperty("--text-shadow-blur-radius", `${4.5 + (3.25 * glowAlpha * (data.emphasized ? 2 : 1))}px`);
+    el.style.setProperty("--text-shadow-opacity", `${glowAlpha * (data.emphasized ? 0.8 : 0.35)}`);
+    return s.Scale.IsSleeping() && s.YOffset.IsSleeping() && s.Glow.IsSleeping();
+  };
+
+  const tick = (now: number) => {
+    const dt = lastTime === 0 ? 0 : Math.min((now - lastTime) / 1000, 0.05);
+    lastTime = now;
+
+    const pos = props.getCurrentPos();
+    for (const data of allSyllableSprings) {
+      const { syllable: syn } = data;
+      const start = syn.StartTime * 1000;
+      const end = syn.EndTime * 1000;
+      const duration = end - start;
+      if (duration <= 0) continue;
+
+      const timeScale = Clamp((pos - start) / duration, 0, 1);
+      const isActive = pos >= start && pos <= end;
+      const isPast = pos > end;
+
+      // Detect state transitions
+      const prevState = data._state ?? "upcoming";
+      const newState = isActive ? "active" : isPast ? "past" : "upcoming";
+      const stateChanged = newState !== prevState;
+      data._state = newState;
+
+      if (stateChanged && newState === "active") {
+        // Force springs to starting position on activation
+        data.springs.Scale.Set(0.95);
+        data.springs.YOffset.Set(1 / 100);
+        data.springs.Glow.Set(0);
+        for (const letter of data.letters) {
+          letter.springs.Scale.Set(0.95);
+          letter.springs.YOffset.Set(1 / 100);
+          letter.springs.Glow.Set(0);
+        }
+      }
+
+      // Per-letter animation for emphasized syllables
+      if (data.emphasized && data.letters.length > 0) {
+        const timeAlpha = easeSinOut(timeScale);
+        for (const letter of data.letters) {
+          const letterTime = timeAlpha - letter.start;
+          const letterTimeScale = Clamp(letterTime / letter.duration, 0, 1);
+          const glowTimeScale = Clamp(letterTime / letter.glowDuration, 0, 1);
+          if (isActive) {
+            letter.springs.Scale.Final = ScaleSpline.at(letterTimeScale);
+            letter.springs.YOffset.Final = YOffsetSpline.at(letterTimeScale);
+            letter.springs.Glow.Final = GlowSpline.at(glowTimeScale);
+          } else if (isPast) {
+            // Let springs settle naturally to rest
+            letter.springs.Scale.Final = 1;
+            letter.springs.YOffset.Final = 0;
+            letter.springs.Glow.Final = 0;
+          }
+          const ls = letter.springs;
+          const scale = ls.Scale.Update(dt);
+          const yOff = ls.YOffset.Update(dt);
+          const glowAlpha = ls.Glow.Update(dt);
+          letter.el.style.transform = `translateY(calc(var(--lyrics-size, 1em) * ${yOff * 2}))`;
+          letter.el.style.scale = scale.toString();
+          letter.el.style.setProperty("--text-shadow-blur-radius", `${4 + (3 * glowAlpha * 2)}px`);
+          letter.el.style.setProperty("--text-shadow-opacity", `${glowAlpha * 0.8}`);
+        }
+      }
+
+      // Update syllable-level targets
+      if (isActive) {
+        updateLiveTextState(data, timeScale);
+      } else if (isPast) {
+        // Let springs settle naturally
+        data.springs.Scale.Final = 1;
+        data.springs.YOffset.Final = 0;
+        data.springs.Glow.Final = 0;
+      }
+
+      // Update spring physics and apply visuals (always — lets springs settle)
+      updateLiveTextVisuals(data, timeScale, dt);
+    }
+
+    rafId = requestAnimationFrame(tick);
+  };
+
+  onMount(() => {
+    if (allSyllableSprings.length > 0) {
+      rafId = requestAnimationFrame(tick);
+    }
+  });
+
+  onCleanup(() => {
+    if (rafId) cancelAnimationFrame(rafId);
+  });
+
   const words = createMemo(() => {
     const syllables = props.vocalPart.Syllables;
     const result: Word[] = [];
@@ -196,60 +350,179 @@ function LeadRenderer(props: LeadRendererProps) {
                     </Show>
                   );
 
+                  // Track syllable activation for bounce effect
+                  const isSyllableActive = createMemo(() => {
+                    const status = props.lineStatus();
+                    if (status === "past") return false;
+                    if (status === "upcoming") return false;
+
+                    const start = syllable.StartTime * 1000;
+                    const end = syllable.EndTime * 1000;
+                    const pos = props.getCurrentPos();
+                    return pos >= start && pos < end;
+                  });
+
+                  // Calculate syllable duration
+                  const syllableDuration = createMemo(() => {
+                    const start = syllable.StartTime * 1000;
+                    const end = syllable.EndTime * 1000;
+                    return end - start;
+                  });
+
+                  // Spring physics for bounce, Y-offset, glow
+                  const emphasized = IsEmphasized(syllableDuration(), displayText().length);
+                  const syllableSprings = {
+                    Scale: new Spring(0, SyllableSpringConfig.Scale.dampingRatio, SyllableSpringConfig.Scale.frequency),
+                    YOffset: new Spring(0, SyllableSpringConfig.YOffset.dampingRatio, SyllableSpringConfig.YOffset.frequency),
+                    Glow: new Spring(0, SyllableSpringConfig.Glow.dampingRatio, SyllableSpringConfig.Glow.frequency),
+                  };
+                  let springRegistered = false;
+                  const syllableSpringData: SyllableSpringData = {
+                    el: undefined as any,
+                    emphasized,
+                    letters: [],
+                    syllable,
+                    springs: syllableSprings,
+                  };
+
                   return (
                     <span
                       class="syllable"
                       classList={{
                         "has-romanized-bottom": showBottom() && hasRomanizedForSyllable(),
                         "has-romanized-top": showTop() && hasRomanizedForSyllable(),
+                        active: isSyllableActive(),
+                      }}
+                      ref={(el) => {
+                        if (!el) return;
+                        syllableSpringData.el = el;
+                        if (!springRegistered) {
+                          allSyllableSprings.push(syllableSpringData);
+                          // Initialize springs at starting position
+                          syllableSprings.Scale.Set(0.95);
+                          syllableSprings.YOffset.Set(1 / 100);
+                          syllableSprings.Glow.Set(0);
+                          updateLiveTextVisuals(syllableSpringData, 0, 0);
+                          springRegistered = true;
+                        }
                       }}
                     >
                       <Show when={showTop()}>
                         <RomanizedLyrics position="top" />
                       </Show>
-                      <span>
-                        <For each={splitText()}>
-                          {(char, charIdx) => {
-                            if (SPACE_REGEX.test(char)) return " ";
+                      <span class="syllable-wrapper">
+                        <span>
+                          {emphasized ? (
+                            // Emphasized: per-letter spans with individual springs
+                            <For each={splitText()}>
+                              {(char, charIdx) => {
+                                const letterCount = splitText().length;
+                                const relativeTimestep = 1 / letterCount;
+                                const letterStart = charIdx() * relativeTimestep;
 
-                            const charProgress = createMemo(() => {
-                              const status = props.lineStatus();
-                              if (status === "past") return 100;
-                              if (status === "upcoming") return 0;
+                                // Gradient progress for emphasized letters
+                                const charProgress = createMemo(() => {
+                                  const status = props.lineStatus();
+                                  if (status === "past") return 100;
+                                  if (status === "upcoming") return 0;
 
-                              const start = syllable.StartTime * 1000;
-                              const end = syllable.EndTime * 1000;
-                              const pos = props.getCurrentPos();
+                                  const pos = props.getCurrentPos();
+                                  const start = syllable.StartTime * 1000;
+                                  const end = syllable.EndTime * 1000;
 
-                              if (pos < start) return 0;
-                              if (pos >= end) return 100;
+                                  if (pos >= end) return 100;
+                                  if (pos < start) return 0;
 
-                              const charDuration = (end - start) / splitText().length;
-                              const charStart = start + charIdx() * charDuration;
-                              const charEnd = charStart + charDuration;
+                                  const charDuration = (end - start) / letterCount;
+                                  const charStart = start + charIdx() * charDuration;
+                                  const charEnd = charStart + charDuration;
 
-                              if (pos < charStart) return 0;
-                              if (pos >= charEnd) return 100;
+                                  if (pos < charStart) return 0;
+                                  if (pos >= charEnd) return 100;
 
-                              return ((pos - charStart) / charDuration) * 100;
-                            });
+                                  return ((pos - charStart) / charDuration) * 100;
+                                });
 
-                            return (
-                              <span
-                                class="char"
-                                style={{
-                                  "--char-progress": `${charProgress()}%`,
-                                  "--char-progress-2": `${charProgress() > 0 ? charProgress() + 20 : 0}%`,
-                                  "--shadow-alpha": (charProgress() / 200) * 0.85,
-                                  "--shadow-blur": `${charProgress() * 0.06}px`,
-                                  "background-image": `linear-gradient(${props.isRTL ? 270 : 90}deg, rgba(255, 255, 255, 0.85) var(--char-progress), rgba(255, 255, 255, 0.4) var(--char-progress-2))`,
-                                }}
-                              >
-                                {char}
-                              </span>
-                            );
-                          }}
-                        </For>
+                                return (
+                                  <span
+                                    class="char"
+                                    style={{
+                                      "--char-progress": `${charProgress()}%`,
+                                      "--char-progress-2": `${charProgress() > 0 ? charProgress() + 20 : 0}%`,
+                                      "background-image": `linear-gradient(${props.isRTL ? 270 : 90}deg, rgba(255, 255, 255, 0.85) var(--char-progress), rgba(255, 255, 255, 0.4) var(--char-progress-2))`,
+                                    }}
+                                    ref={(el) => {
+                                      if (!el || syllableSpringData.letters[charIdx()]) return;
+                                      const letterSprings = {
+                                        Scale: new Spring(0, SyllableSpringConfig.Scale.dampingRatio, SyllableSpringConfig.Scale.frequency),
+                                        YOffset: new Spring(0, SyllableSpringConfig.YOffset.dampingRatio, SyllableSpringConfig.YOffset.frequency),
+                                        Glow: new Spring(0, SyllableSpringConfig.Glow.dampingRatio, SyllableSpringConfig.Glow.frequency),
+                                      };
+                                      letterSprings.Scale.Set(0.95);
+                                      letterSprings.YOffset.Set(1 / 100);
+                                      letterSprings.Glow.Set(0);
+                                      syllableSpringData.letters[charIdx()] = {
+                                        duration: relativeTimestep,
+                                        el,
+                                        glowDuration: 1 - letterStart,
+                                        springs: letterSprings,
+                                        start: letterStart,
+                                      };
+                                    }}
+                                  >
+                                    {char}
+                                  </span>
+                                );
+                              }}
+                            </For>
+                          ) : (
+                            // Normal: character gradient progress
+                            <For each={splitText()}>
+                              {(char, charIdx) => {
+                                if (SPACE_REGEX.test(char)) return " ";
+
+                                const charProgress = createMemo(() => {
+                                  const status = props.lineStatus();
+                                  if (status === "past") return 100;
+                                  if (status === "upcoming") return 0;
+
+                                  // Line is active — check syllable-level progress
+                                  const pos = props.getCurrentPos();
+                                  const start = syllable.StartTime * 1000;
+                                  const end = syllable.EndTime * 1000;
+
+                                  // Position past this syllable's end but line still active
+                                  if (pos >= end) return 100;
+                                  if (pos < start) return 0;
+
+                                  const charDuration = (end - start) / splitText().length;
+                                  const charStart = start + charIdx() * charDuration;
+                                  const charEnd = charStart + charDuration;
+
+                                  if (pos < charStart) return 0;
+                                  if (pos >= charEnd) return 100;
+
+                                  return ((pos - charStart) / charDuration) * 100;
+                                });
+
+                                return (
+                                  <span
+                                    class="char"
+                                    style={{
+                                      "--char-progress": `${charProgress()}%`,
+                                      "--char-progress-2": `${charProgress() > 0 ? charProgress() + 20 : 0}%`,
+                                      "--shadow-alpha": (charProgress() / 200) * 0.85,
+                                      "--shadow-blur": `${charProgress() * 0.06}px`,
+                                      "background-image": `linear-gradient(${props.isRTL ? 270 : 90}deg, rgba(255, 255, 255, 0.85) var(--char-progress), rgba(255, 255, 255, 0.4) var(--char-progress-2))`,
+                                    }}
+                                  >
+                                    {char}
+                                  </span>
+                                );
+                              }}
+                            </For>
+                          )}
+                        </span>
                       </span>
 
                       <Show when={showBottom()}>

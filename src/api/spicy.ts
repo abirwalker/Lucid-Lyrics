@@ -29,7 +29,7 @@ export async function fetchSpicy({ id }: FetchOptions): Promise<APIResponse<Lyri
     }
 
     const lyricData = spicyPacker.unpack(unpackedData) as Lyrics;
-    isMissing = lyricData === null || lyricData === undefined || lyricData === "";
+    isMissing = lyricData === null || lyricData === undefined;
     if (isMissing) {
       return { status: "missing_lyrics" };
     }
