@@ -86,6 +86,7 @@ function buildLineEntries(lyrics: LineData): LineEntry[] {
 }
 
 export default function LineLyrics(props: LineLyricsProps) {
+  // eslint-disable-next-line oxc/no-unassigned-vars
   let containerRef!: HTMLDivElement;
 
   const itemRefs = new Map<number, HTMLDivElement>();
@@ -189,7 +190,7 @@ export default function LineLyrics(props: LineLyricsProps) {
     if (!lenis?.rootElement) return;
 
     const height = lenis.rootElement.clientHeight;
-    const baseOffset = isNPV ? 16 : isMobile && !isWidgetHidden ? 48 : height / 2.7;
+    const baseOffset = isNPV ? height * 0.3 : isMobile && !isWidgetHidden ? 48 : height / 2.7;
     const activeCount = activeIndices().length;
     const lineOffset = activeCount > 1 ? (activeCount - 1) * 20 : 0;
     const off = -(baseOffset + lineOffset);
@@ -212,8 +213,12 @@ export default function LineLyrics(props: LineLyricsProps) {
 
     const absoluteY = targetRect.top - wrapperRect.top + lenis.scroll + scrollOffset();
 
+    const style = getComputedStyle(containerRef);
+    const isNPV = Number.parseInt(style.getPropertyValue("--is-npv") || "0");
+
     lenis.scrollTo(absoluteY, {
-      immediate,
+      immediate: immediate && !isNPV,
+      duration: isNPV && !immediate ? 0.4 : undefined,
       userData: { autoScroll: true },
     });
   };
@@ -480,11 +485,19 @@ export default function LineLyrics(props: LineLyricsProps) {
             return ((pos - start) / (end - start)) * 100;
           });
 
+          const bloomIntensity = createMemo(() => {
+            const p = progress();
+            if (p < 80) return 0;
+            return (p - 80) / 20;
+          });
+
           return (
             <div
               class="line-wrapper"
               classList={{
                 rtl: isLineRTL(),
+                active: lineStatus() === "active",
+                past: lineStatus() === "past",
               }}
               ref={(el) => {
                 if (!el) return;
@@ -495,6 +508,7 @@ export default function LineLyrics(props: LineLyricsProps) {
                 "--l-blur": blurStyle(),
                 "--l-opacity": isActive() ? 1 : 0.6,
                 "--l-scale": isActive() ? 1.01 : 1,
+                "--line-bloom": bloomIntensity(),
               }}
             >
               <div

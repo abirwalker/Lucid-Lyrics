@@ -27,7 +27,7 @@ import {
 } from "~/lib/SpringConfig";
 
 // Match spicy-card's d3-ease sinOut for letter staggering
-const easeSinOut = (t: number): number => (1 - Math.cos((t * Math.PI) / 2));
+const easeSinOut = (t: number): number => 1 - Math.cos((t * Math.PI) / 2);
 
 type LetterSpringData = {
   springs: { Scale: Spring; YOffset: Spring; Glow: Spring };
@@ -122,7 +122,11 @@ function LeadRenderer(props: LeadRendererProps) {
   };
 
   // Match spicy-card: apply spring values to DOM
-  const updateLiveTextVisuals = (data: SyllableSpringData, timeScale: number, deltaTime: number): boolean => {
+  const updateLiveTextVisuals = (
+    data: SyllableSpringData,
+    _timeScale: number,
+    deltaTime: number,
+  ): boolean => {
     const { el, springs: s } = data;
     if (!el) return true;
     const scale = s.Scale.Update(deltaTime);
@@ -130,7 +134,10 @@ function LeadRenderer(props: LeadRendererProps) {
     const glowAlpha = s.Glow.Update(deltaTime);
     el.style.transform = `translateY(calc(var(--lyrics-size, 1em) * ${yOffset * (data.emphasized ? 2 : 1)}))`;
     el.style.scale = scale.toString();
-    el.style.setProperty("--text-shadow-blur-radius", `${4.5 + (3.25 * glowAlpha * (data.emphasized ? 2 : 1))}px`);
+    el.style.setProperty(
+      "--text-shadow-blur-radius",
+      `${4.5 + 3.25 * glowAlpha * (data.emphasized ? 2 : 1)}px`,
+    );
     el.style.setProperty("--text-shadow-opacity", `${glowAlpha * (data.emphasized ? 0.8 : 0.35)}`);
     return s.Scale.IsSleeping() && s.YOffset.IsSleeping() && s.Glow.IsSleeping();
   };
@@ -192,7 +199,7 @@ function LeadRenderer(props: LeadRendererProps) {
           const glowAlpha = ls.Glow.Update(dt);
           letter.el.style.transform = `translateY(calc(var(--lyrics-size, 1em) * ${yOff * 2}))`;
           letter.el.style.scale = scale.toString();
-          letter.el.style.setProperty("--text-shadow-blur-radius", `${4 + (3 * glowAlpha * 2)}px`);
+          letter.el.style.setProperty("--text-shadow-blur-radius", `${4 + 3 * glowAlpha * 2}px`);
           letter.el.style.setProperty("--text-shadow-opacity", `${glowAlpha * 0.8}`);
         }
       }
@@ -372,9 +379,21 @@ function LeadRenderer(props: LeadRendererProps) {
                   // Spring physics for bounce, Y-offset, glow
                   const emphasized = IsEmphasized(syllableDuration(), displayText().length);
                   const syllableSprings = {
-                    Scale: new Spring(0, SyllableSpringConfig.Scale.dampingRatio, SyllableSpringConfig.Scale.frequency),
-                    YOffset: new Spring(0, SyllableSpringConfig.YOffset.dampingRatio, SyllableSpringConfig.YOffset.frequency),
-                    Glow: new Spring(0, SyllableSpringConfig.Glow.dampingRatio, SyllableSpringConfig.Glow.frequency),
+                    Scale: new Spring(
+                      0,
+                      SyllableSpringConfig.Scale.dampingRatio,
+                      SyllableSpringConfig.Scale.frequency,
+                    ),
+                    YOffset: new Spring(
+                      0,
+                      SyllableSpringConfig.YOffset.dampingRatio,
+                      SyllableSpringConfig.YOffset.frequency,
+                    ),
+                    Glow: new Spring(
+                      0,
+                      SyllableSpringConfig.Glow.dampingRatio,
+                      SyllableSpringConfig.Glow.frequency,
+                    ),
                   };
                   let springRegistered = false;
                   const syllableSpringData: SyllableSpringData = {
@@ -454,9 +473,21 @@ function LeadRenderer(props: LeadRendererProps) {
                                     ref={(el) => {
                                       if (!el || syllableSpringData.letters[charIdx()]) return;
                                       const letterSprings = {
-                                        Scale: new Spring(0, SyllableSpringConfig.Scale.dampingRatio, SyllableSpringConfig.Scale.frequency),
-                                        YOffset: new Spring(0, SyllableSpringConfig.YOffset.dampingRatio, SyllableSpringConfig.YOffset.frequency),
-                                        Glow: new Spring(0, SyllableSpringConfig.Glow.dampingRatio, SyllableSpringConfig.Glow.frequency),
+                                        Scale: new Spring(
+                                          0,
+                                          SyllableSpringConfig.Scale.dampingRatio,
+                                          SyllableSpringConfig.Scale.frequency,
+                                        ),
+                                        YOffset: new Spring(
+                                          0,
+                                          SyllableSpringConfig.YOffset.dampingRatio,
+                                          SyllableSpringConfig.YOffset.frequency,
+                                        ),
+                                        Glow: new Spring(
+                                          0,
+                                          SyllableSpringConfig.Glow.dampingRatio,
+                                          SyllableSpringConfig.Glow.frequency,
+                                        ),
                                       };
                                       letterSprings.Scale.Set(0.95);
                                       letterSprings.YOffset.Set(1 / 100);
@@ -541,6 +572,7 @@ function LeadRenderer(props: LeadRendererProps) {
 }
 
 function SyllableLyrics(props: SyllableLyricsProps) {
+  // eslint-disable-next-line oxc/no-unassigned-vars
   let containerRef!: HTMLDivElement;
   const itemRefs = new Map<number, HTMLDivElement>();
   const elementToIndex = new WeakMap<Element, number>();
@@ -705,7 +737,7 @@ function SyllableLyrics(props: SyllableLyricsProps) {
     let baseOffset = height / 2.7;
 
     if (isNPV()) {
-      baseOffset = 16;
+      baseOffset = height / 2.7;
     } else if (isMobile() && !isWidgetHidden) {
       baseOffset = 48;
     } else if (romanize() && romanize_position() !== "replace") {
