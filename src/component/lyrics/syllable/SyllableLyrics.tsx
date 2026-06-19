@@ -1,4 +1,5 @@
 import type { Syllable, SyllableData, VocalPart } from "~/lib/api/types";
+import { toast } from "~/lib/sonner";
 import {
   For,
   Show,
@@ -11,7 +12,8 @@ import {
 } from "solid-js";
 import { useLenis, useLenisContent } from "~/component/ui/Lenis";
 import { useStore } from "@nanostores/solid";
-import { $current_position, $romanize, $romanize_position, getBlurmap } from "~/stores";
+import { $current_position, $romanize, $romanize_position, $track_colors, getBlurmap } from "~/stores";
+import { getSyllableColor, setSyllableColor, clearSyllableColorMap, makeSyllableKey, seededRandom } from "~/lib/colorExtract";
 import { useRenderer } from "~/context/LyricsRenderer";
 import { SPACE_REGEX, splitGraphemes } from "~/lib/string";
 import { seekTo } from "~/lib/spotify/player";
@@ -42,6 +44,10 @@ type SyllableSpringData = {
   el: HTMLSpanElement;
   syllable: Syllable;
   emphasized: boolean;
+  surpriseBounce: boolean;
+  surpriseColor: boolean; // 10% chance — adds album color tint
+  _surpriseColor?: string;
+  _wordEndTime?: number; // End time of the whole word (ms) — tint persists until this
   letters: LetterSpringData[];
   _state?: "active" | "past" | "upcoming";
 };
@@ -103,20 +109,43 @@ function LeadRenderer(props: LeadRendererProps) {
   const allSyllableSprings: SyllableSpringData[] = [];
   let rafId = 0;
   let lastTime = 0;
+  const trackColors = useStore($track_colors);
+
+  // When palette updates (extraction finishes), re-assign colors to all surprise syllables
+  // that were assigned stale default colors before extraction completed
+  createEffect(on(trackColors, () => {
+    clearSyllableColorMap();
+    for (const data of allSyllableSprings) {
+      if (data.surpriseColor) {
+        data._surpriseColor = undefined;
+      }
+    }
+  }));
+
+  // Simple weighted random from palette
+  // Deterministic random from palette — same syllable always gets same color
+  const randomTrackColor = (seed: string) => {
+    const c = trackColors();
+    const colors = [c.LIGHT_VIBRANT, c.VIBRANT_NON_ALARMING, c.DESATURATED];
+    const r = seededRandom(seed);
+    const idx = r < 0.50 ? 0 : r < 0.80 ? 1 : 2;
+    return colors[idx].replace(/^rgb\(/, "").replace(/\)$/, "");
+  };
 
   // Match spicy-card: update targets only on state change
   const updateLiveTextState = (data: SyllableSpringData, timeScale: number, forceTo?: true) => {
     const { springs: s } = data;
+    const useEmphasized = data.emphasized || data.surpriseBounce;
     const scale = ScaleSpline.at(timeScale);
     const yOffset = YOffsetSpline.at(timeScale);
     const glowAlpha = GlowSpline.at(timeScale);
     if (forceTo) {
       s.Scale.Set(scale);
-      s.YOffset.Set(yOffset);
+      s.YOffset.Set(useEmphasized ? yOffset * 1.5 : yOffset);
       s.Glow.Set(glowAlpha);
     } else {
       s.Scale.Final = scale;
-      s.YOffset.Final = yOffset;
+      s.YOffset.Final = useEmphasized ? yOffset * 1.5 : yOffset;
       s.Glow.Final = glowAlpha;
     }
   };
@@ -132,13 +161,40 @@ function LeadRenderer(props: LeadRendererProps) {
     const scale = s.Scale.Update(deltaTime);
     const yOffset = s.YOffset.Update(deltaTime);
     const glowAlpha = s.Glow.Update(deltaTime);
-    el.style.transform = `translateY(calc(var(--lyrics-size, 1em) * ${yOffset * (data.emphasized ? 2 : 1)}))`;
+    const isSurprise = data.surpriseBounce || data.surpriseColor;
+    const intensity = data.emphasized ? 2 : isSurprise ? 2.5 : 1;
+    el.style.transform = `translateY(calc(var(--lyrics-size, 1em) * ${yOffset * intensity}))`;
     el.style.scale = scale.toString();
-    el.style.setProperty(
-      "--text-shadow-blur-radius",
-      `${4.5 + 3.25 * glowAlpha * (data.emphasized ? 2 : 1)}px`,
-    );
-    el.style.setProperty("--text-shadow-opacity", `${glowAlpha * (data.emphasized ? 0.8 : 0.35)}`);
+
+    // Tint + bloom persists for the entire word duration, plus a fade-out after
+    const pos = props.getCurrentPos();
+    const wordEnd = data._wordEndTime;
+    const tintFading = data.surpriseColor && wordEnd !== undefined && pos > wordEnd && pos <= wordEnd + 300;
+    const tintActive = data.surpriseColor && wordEnd !== undefined && pos <= wordEnd;
+
+    const blur = tintActive ? 28 : tintFading ? 28 : isSurprise ? 18 : 5.5 + 4 * glowAlpha * intensity;
+    const opacity = tintActive ? 0.8 : tintFading ? 0.8 * (1 - (pos - wordEnd!) / 300) : glowAlpha * (data.emphasized ? 1 : isSurprise ? 0.7 : 0.5);
+    el.style.setProperty("--text-shadow-blur-radius", `${blur}px`);
+    el.style.setProperty("--text-shadow-opacity", `${opacity}`);
+
+    if (data.surpriseColor && !data._surpriseColor) {
+      // Use shared map so main view and NPV show the same color
+      const key = makeSyllableKey(data.syllable.Text, data.syllable.StartTime);
+      const existing = getSyllableColor(key);
+      if (existing) {
+        data._surpriseColor = existing;
+      } else {
+        const color = randomTrackColor(key + "_colorpick");
+        setSyllableColor(key, color);
+        data._surpriseColor = color;
+      }
+    }
+    const color = data._surpriseColor || "255 255 255";
+    const showTint = tintActive || tintFading;
+    el.style.setProperty("--glow-color", showTint ? color : "255 255 255");
+    el.style.setProperty("--glow-intensity", showTint ? "2.5" : "1");
+    el.style.setProperty("--tint-color", showTint ? color : "");
+    el.classList.toggle("surprise-tint", showTint);
     return s.Scale.IsSleeping() && s.YOffset.IsSleeping() && s.Glow.IsSleeping();
   };
 
@@ -169,6 +225,27 @@ function LeadRenderer(props: LeadRendererProps) {
         data.springs.Scale.Set(0.95);
         data.springs.YOffset.Set(1 / 100);
         data.springs.Glow.Set(0);
+
+        // Surprise bounce for short non-emphasized syllables (20% chance)
+        if (data.surpriseBounce && !data.emphasized) {
+          data.springs.Scale.Set(0.97);
+          data.springs.YOffset.Set(0.5 / 100);
+          data.springs.Glow.Set(0.8); // Start glow immediately
+          toast(`🎯 Surprise bounce: "${data.syllable.Text}"`, {
+            duration: 1500,
+            style: { fontSize: "12px", opacity: 0.8 },
+          });
+        }
+
+        // Surprise color (10% chance)
+        if (data.surpriseColor) {
+          data.springs.Glow.Set(0.8);
+          toast(`🎨 Color: "${data.syllable.Text}"`, {
+            duration: 1500,
+            style: { fontSize: "12px", opacity: 0.8 },
+          });
+        }
+
         for (const letter of data.letters) {
           letter.springs.Scale.Set(0.95);
           letter.springs.YOffset.Set(1 / 100);
@@ -248,6 +325,32 @@ function LeadRenderer(props: LeadRendererProps) {
       }
     }
     return result;
+  });
+
+  // Word-level bounce: words under 12 chars with duration > 1s
+  const wordBounceMap = createMemo(() => {
+    const map = new Set<Syllable>();
+    for (const word of words()) {
+      const text = word.Syllables.map((s) => s.Text).join("");
+      if (text.length > 12) continue;
+      const start = word.Syllables[0].StartTime * 1000;
+      const end = word.Syllables[word.Syllables.length - 1].EndTime * 1000;
+      if (end - start <= 1000) continue;
+      const wordSeed = makeSyllableKey(text, word.Syllables[0].StartTime);
+      if (seededRandom(wordSeed + "_wbounce") >= 0.20) continue;
+      for (const s of word.Syllables) map.add(s);
+    }
+    return map;
+  });
+
+  // Map each syllable to its word's end time (ms) — tint persists until word ends
+  const syllableWordEndMap = createMemo(() => {
+    const map = new Map<Syllable, number>();
+    for (const word of words()) {
+      const wordEnd = word.Syllables[word.Syllables.length - 1].EndTime * 1000;
+      for (const s of word.Syllables) map.set(s, wordEnd);
+    }
+    return map;
   });
 
   const handleClick = () => seekTo(props.vocalPart.StartTime * 1000);
@@ -396,9 +499,15 @@ function LeadRenderer(props: LeadRendererProps) {
                     ),
                   };
                   let springRegistered = false;
+                  const bounceRand = Math.random();
+                  const colorRand = Math.random();
+
                   const syllableSpringData: SyllableSpringData = {
                     el: undefined as any,
                     emphasized,
+                    surpriseBounce: !emphasized && (bounceRand < 0.30 || wordBounceMap().has(syllable)),
+                    surpriseColor: !emphasized && colorRand < 0.20,
+                    _wordEndTime: syllableWordEndMap().get(syllable),
                     letters: [],
                     syllable,
                     springs: syllableSprings,

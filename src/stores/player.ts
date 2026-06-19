@@ -9,6 +9,7 @@ import {
 } from "~/lib/spotify/player";
 import Tempus from "@darkroom.engineering/tempus";
 import { wait } from "~/lib/dom/wait";
+import { extractTrackColors, clearSyllableColorMap, type TrackColors } from "~/lib/colorExtract";
 
 type PlayerTrack = typeof Spicetify.Player.data.item;
 
@@ -136,3 +137,30 @@ export const $shuffle_state = computed($player_states, (raw) => {
 });
 
 export const $liked_state = computed($player_states, (e) => e.liked);
+
+// Album art extracted colors for glow tinting
+export type { TrackColors };
+
+export const $track_colors = atom<TrackColors>({
+  LIGHT_VIBRANT: "180, 180, 180",
+  VIBRANT_NON_ALARMING: "150, 150, 150",
+  DESATURATED: "120, 120, 120",
+});
+
+onMount($track_colors, () => {
+  const updateColors = async () => {
+    clearSyllableColorMap(); // Clear cached colors from previous track
+    const colors = await extractTrackColors();
+    $track_colors.set(colors);
+  };
+
+  // Initial extraction
+  updateColors();
+
+  // Re-extract on song change
+  Spicetify.Player?.addEventListener("songchange", updateColors);
+
+  return () => {
+    Spicetify.Player?.removeEventListener("songchange", updateColors);
+  };
+});

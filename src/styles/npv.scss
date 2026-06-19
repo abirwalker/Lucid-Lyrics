@@ -148,16 +148,16 @@
       .syllable.active .syllable-wrapper,
       .syllable.held-vocal .syllable-wrapper {
         text-shadow:
-          0 0 calc(var(--text-shadow-blur-radius, 0px) * 0.8) rgba(255, 255, 255, calc(var(--text-shadow-opacity, 0) * 0.8)),
-          0 0 calc(var(--text-shadow-blur-radius, 0px) * 0.8 * 0.6) rgba(255, 255, 255, calc(var(--text-shadow-opacity, 0) * 0.8 * 0.6)),
-          0 0 calc(var(--text-shadow-blur-radius, 0px) * 0.8 * 2) rgba(255, 255, 255, calc(var(--text-shadow-opacity, 0) * 0.8 * 0.3));
+          0 0 calc(var(--text-shadow-blur-radius, 0px) * 0.8) rgb(var(--glow-color, 255 255 255) / calc(var(--text-shadow-opacity, 0) * 0.8)),
+          0 0 calc(var(--text-shadow-blur-radius, 0px) * 0.8 * 0.6) rgb(var(--glow-color, 255 255 255) / calc(var(--text-shadow-opacity, 0) * 0.8 * 0.6)),
+          0 0 calc(var(--text-shadow-blur-radius, 0px) * 0.8 * 2) rgb(var(--glow-color, 255 255 255) / calc(var(--text-shadow-opacity, 0) * 0.8 * 0.3));
       }
 
       .syllable:has(.char) .char {
         text-shadow:
-          0 0 calc(var(--text-shadow-blur-radius, 0px) * 0.8 * 0.4) rgba(255, 255, 255, calc(var(--text-shadow-opacity, 0) * 0.8)),
-          0 0 calc(var(--text-shadow-blur-radius, 0px) * 0.8) rgba(255, 255, 255, calc(var(--text-shadow-opacity, 0) * 0.8 * 0.6)),
-          0 0 calc(var(--text-shadow-blur-radius, 0px) * 0.8 * 2) rgba(255, 255, 255, calc(var(--text-shadow-opacity, 0) * 0.8 * 0.3));
+          0 0 calc(var(--text-shadow-blur-radius, 0px) * 0.8 * 0.4) rgb(var(--glow-color, 255 255 255) / calc(var(--text-shadow-opacity, 0) * 0.8)),
+          0 0 calc(var(--text-shadow-blur-radius, 0px) * 0.8) rgb(var(--glow-color, 255 255 255) / calc(var(--text-shadow-opacity, 0) * 0.8 * 0.6)),
+          0 0 calc(var(--text-shadow-blur-radius, 0px) * 0.8 * 2) rgb(var(--glow-color, 255 255 255) / calc(var(--text-shadow-opacity, 0) * 0.8 * 0.3));
       }
     }
 
