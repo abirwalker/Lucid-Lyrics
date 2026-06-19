@@ -170,7 +170,7 @@ function LeadRenderer(props: LeadRendererProps) {
     const pos = props.getCurrentPos();
     const wordEnd = data._wordEndTime;
     const tintFading = data.surpriseColor && wordEnd !== undefined && pos > wordEnd && pos <= wordEnd + 300;
-    const tintActive = data.surpriseColor && wordEnd !== undefined && pos <= wordEnd;
+    const tintActive = data.surpriseColor && wordEnd !== undefined && pos >= data.syllable.StartTime * 1000 && pos <= wordEnd;
 
     // Reduce tint bloom for long-duration short words (played >1s, <15 chars)
     const syllableDuration = (data.syllable.EndTime - data.syllable.StartTime);
@@ -213,6 +213,11 @@ function LeadRenderer(props: LeadRendererProps) {
     el.style.setProperty("--glow-color", showTint ? color : glowColor);
     el.style.setProperty("--glow-intensity", showTint ? "2.5" : "1.5");
     el.style.setProperty("--tint-color", showTint ? color : "");
+    if (showTint && data._surpriseColor) {
+      const [r, g, b] = data._surpriseColor.split(" ").map(Number);
+      const mix = 0.32;
+      el.style.setProperty("--lyrics-text-color", `${Math.round(r * mix + 255 * (1 - mix))} ${Math.round(g * mix + 255 * (1 - mix))} ${Math.round(b * mix + 255 * (1 - mix))}`);
+    }
     el.classList.toggle("surprise-tint", showTint);
     return s.Scale.IsSleeping() && s.YOffset.IsSleeping() && s.Glow.IsSleeping();
   };
@@ -252,7 +257,7 @@ function LeadRenderer(props: LeadRendererProps) {
           data.springs.Glow.Set(0.8); // Start glow immediately
           toast(`🎯 Surprise bounce: "${data.syllable.Text}"`, {
             duration: 1500,
-            style: { fontSize: "12px", opacity: 0.8 },
+            style: { "font-size": "12px", opacity: 0.8 },
           });
         }
 
@@ -261,7 +266,7 @@ function LeadRenderer(props: LeadRendererProps) {
           data.springs.Glow.Set(0.8);
           toast(`🎨 Color: "${data.syllable.Text}"`, {
             duration: 1500,
-            style: { fontSize: "12px", opacity: 0.8 },
+            style: { "font-size": "12px", opacity: 0.8 },
           });
         }
 
@@ -524,8 +529,8 @@ function LeadRenderer(props: LeadRendererProps) {
                   const syllableSpringData: SyllableSpringData = {
                     el: undefined as any,
                     emphasized,
-                    surpriseBounce: !emphasized && (bounceRand < 0.30 || wordBounceMap().has(syllable)),
-                    surpriseColor: !emphasized && colorRand < 0.20,
+                    surpriseBounce: !emphasized && (bounceRand < 0.20 || wordBounceMap().has(syllable)),
+                    surpriseColor: !emphasized && colorRand < 0.15,
                     _wordEndTime: syllableWordEndMap().get(syllable),
                     letters: [],
                     syllable,
