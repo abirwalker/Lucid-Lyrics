@@ -172,8 +172,14 @@ function LeadRenderer(props: LeadRendererProps) {
     const tintFading = data.surpriseColor && wordEnd !== undefined && pos > wordEnd && pos <= wordEnd + 300;
     const tintActive = data.surpriseColor && wordEnd !== undefined && pos <= wordEnd;
 
-    const blur = tintActive ? 28 : tintFading ? 28 : isSurprise ? 18 : 5.5 + 4 * glowAlpha * intensity;
-    const opacity = tintActive ? 0.8 : tintFading ? 0.8 * (1 - (pos - wordEnd!) / 300) : glowAlpha * (data.emphasized ? 1 : isSurprise ? 0.7 : 0.5);
+    // Reduce tint bloom for long-duration short words (played >1s, <15 chars)
+    const syllableDuration = (data.syllable.EndTime - data.syllable.StartTime);
+    const isLongShort = tintActive && syllableDuration > 1 && data.syllable.Text.length < 15;
+    const tintBlur = isLongShort ? 14 : 28;
+    const tintOpacity = isLongShort ? 0.5 : 0.8;
+
+    const blur = tintActive ? tintBlur : tintFading ? tintBlur : isSurprise ? 18 : 4 + 8 * glowAlpha * intensity;
+    const opacity = tintActive ? tintOpacity : tintFading ? tintOpacity * (1 - (pos - wordEnd!) / 300) : glowAlpha * (data.emphasized ? 1.2 : isSurprise ? 0.7 : 0.7);
     el.style.setProperty("--text-shadow-blur-radius", `${blur}px`);
     el.style.setProperty("--text-shadow-opacity", `${opacity}`);
 
@@ -192,7 +198,7 @@ function LeadRenderer(props: LeadRendererProps) {
     const color = data._surpriseColor || "255 255 255";
     const showTint = tintActive || tintFading;
     el.style.setProperty("--glow-color", showTint ? color : "255 255 255");
-    el.style.setProperty("--glow-intensity", showTint ? "2.5" : "1");
+    el.style.setProperty("--glow-intensity", showTint ? "2.5" : "1.5");
     el.style.setProperty("--tint-color", showTint ? color : "");
     el.classList.toggle("surprise-tint", showTint);
     return s.Scale.IsSleeping() && s.YOffset.IsSleeping() && s.Glow.IsSleeping();
@@ -645,12 +651,31 @@ function LeadRenderer(props: LeadRendererProps) {
                                   return ((pos - charStart) / charDuration) * 100;
                                 });
 
+                                // Glow intensity peaks near the playhead, fades outward
+                                const charGlowIntensity = createMemo(() => {
+                                  const status = props.lineStatus();
+                                  if (status === "past") return 0.15;
+                                  if (status === "upcoming") return 0;
+
+                                  const pos = props.getCurrentPos();
+                                  const start = syllable.StartTime * 1000;
+                                  const end = syllable.EndTime * 1000;
+                                  if (pos < start || pos >= end) return 0;
+
+                                  const totalChars = splitText().length;
+                                  const charCenter = (charIdx() + 0.5) / totalChars;
+                                  const syllableProgress = (pos - start) / (end - start);
+                                  const distance = Math.abs(syllableProgress - charCenter);
+                                  return Math.max(0.15, 1 - distance * 3.5);
+                                });
+
                                 return (
                                   <span
                                     class="char"
                                     style={{
                                       "--char-progress": `${charProgress()}%`,
                                       "--char-progress-2": `${charProgress() > 0 ? charProgress() + 20 : 0}%`,
+                                      "--char-glow-intensity": charGlowIntensity(),
                                       "--shadow-alpha": (charProgress() / 200) * 0.85,
                                       "--shadow-blur": `${charProgress() * 0.06}px`,
                                       "background-image": `linear-gradient(${props.isRTL ? 270 : 90}deg, rgba(255, 255, 255, 0.85) var(--char-progress), rgba(255, 255, 255, 0.4) var(--char-progress-2))`,
@@ -1068,11 +1093,27 @@ function SyllableLyrics(props: SyllableLyricsProps) {
     return `${blur}px`;
   };
 
+  const getLineOpacity = (index: number): number => {
+    const active = activeIndices();
+    let distance = Math.abs(index - scrollToIndex());
+
+    for (const a of active) {
+      const d = Math.abs(index - a);
+      if (d < distance) distance = d;
+    }
+
+    if (distance === 0) return 1;
+    if (distance === 1) return 0.85;
+    if (distance === 2) return 0.55;
+    return Math.max(0.2, 1 - distance * 0.25);
+  };
+
   return (
     <div class="syllable-lyrics" ref={containerRef}>
       <For each={lineEntries()}>
         {(entry) => {
           const blur = createMemo(() => getBlurAmount(entry.index, isUserScroll()));
+          const lineOpacity = createMemo(() => getLineOpacity(entry.index));
           const isActive = createMemo(() => {
             const isTarget = activeIndices().includes(entry.index);
 
@@ -1129,7 +1170,7 @@ function SyllableLyrics(props: SyllableLyricsProps) {
               }}
               style={{
                 "--l-blur": blur(),
-                "--l-opacity": isActive() ? 1 : 0.6,
+                "--l-opacity": isActive() ? 1 : lineOpacity(),
                 "--l-scale": isActive() ? 1.01 : 1,
               }}
             >
