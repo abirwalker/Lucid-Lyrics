@@ -197,7 +197,20 @@ function LeadRenderer(props: LeadRendererProps) {
     }
     const color = data._surpriseColor || "255 255 255";
     const showTint = tintActive || tintFading;
-    el.style.setProperty("--glow-color", showTint ? color : "255 255 255");
+
+    // Subtle tint: blend first palette color with white for non-surprise active glow
+    let glowColor = "255 255 255";
+    if (!showTint) {
+      const c = trackColors();
+      const accent = c.LIGHT_VIBRANT || c.VIBRANT_NON_ALARMING;
+      if (accent) {
+        const [r, g, b] = accent.split(",").map(Number);
+        const mix = 0.20;
+        glowColor = `${Math.round(r * mix + 255 * (1 - mix))} ${Math.round(g * mix + 255 * (1 - mix))} ${Math.round(b * mix + 255 * (1 - mix))}`;
+      }
+    }
+
+    el.style.setProperty("--glow-color", showTint ? color : glowColor);
     el.style.setProperty("--glow-intensity", showTint ? "2.5" : "1.5");
     el.style.setProperty("--tint-color", showTint ? color : "");
     el.classList.toggle("surprise-tint", showTint);
@@ -1172,6 +1185,7 @@ function SyllableLyrics(props: SyllableLyricsProps) {
                 "--l-blur": blur(),
                 "--l-opacity": isActive() ? 1 : lineOpacity(),
                 "--l-scale": isActive() ? 1.01 : 1,
+                "filter": blur() !== "0px" ? `blur(${blur()})` : undefined,
               }}
             >
               {entry.type === "interlude" ? (

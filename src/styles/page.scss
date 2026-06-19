@@ -473,7 +473,6 @@ $floating-transition:
     --l-opacity: 0.6;
     overflow: visible;
 
-    filter: blur(var(--l-blur));
     transform: scale(var(--l-scale));
     opacity: var(--l-opacity);
     transform-origin: center left;
@@ -483,7 +482,6 @@ $floating-transition:
     transition-duration: 0.3s;
     transition-timing-function: cubic-bezier(0.25, 1, 0.5, 1);
     transition-property: filter, transform, opacity;
-    will-change: filter, transform, opacity;
 
     &:hover {
       filter: blur(0px);
@@ -548,7 +546,7 @@ $floating-transition:
       0 0 calc(var(--text-shadow-blur-radius, 0px) * 0.4) rgb(var(--glow-color, 255 255 255) / calc(var(--text-shadow-opacity, 0) * var(--glow-intensity, 1))),
       0 0 var(--text-shadow-blur-radius, 0px) rgb(var(--glow-color, 255 255 255) / calc(var(--text-shadow-opacity, 0) * 0.6 * var(--glow-intensity, 1))),
       0 0 calc(var(--text-shadow-blur-radius, 0px) * 2) rgb(var(--glow-color, 255 255 255) / calc(var(--text-shadow-opacity, 0) * 0.3 * var(--glow-intensity, 1))),
-      0 0 calc(var(--text-shadow-blur-radius, 0px) * 3) rgb(var(--glow-color, 255 255 255) / calc(var(--text-shadow-opacity, 0) * 0.15 * var(--glow-intensity, 1)));
+      0 0 calc(var(--text-shadow-blur-radius, 0px) * 3) rgb(var(--glow-color, 255 255 255) / calc(var(--text-shadow-opacity, 0) * 0.135 * var(--glow-intensity, 1)));
   }
 
   // Guest singer (v2) glow
@@ -564,8 +562,6 @@ $floating-transition:
     position: relative;
     display: block;
     cursor: pointer;
-    content-visibility: auto;
-    backface-visibility: hidden;
 
     &.has-bg-line {
       margin-bottom: var(--inner-line-gap, v.$space-xs);
