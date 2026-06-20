@@ -13,7 +13,7 @@ import {
 import { useLenis, useLenisContent } from "~/component/ui/Lenis";
 import { useStore } from "@nanostores/solid";
 import { $current_position, $romanize, $romanize_position, $track_colors, getBlurmap } from "~/stores";
-import { getSyllableColor, setSyllableColor, clearSyllableColorMap, makeSyllableKey, seededRandom } from "~/lib/colorExtract";
+import { getSyllableColor, setSyllableColor, clearSyllableColorMap, makeSyllableKey, seededRandom, hexToRgb } from "~/lib/colorExtract";
 import { useRenderer } from "~/context/LyricsRenderer";
 import { SPACE_REGEX, splitGraphemes } from "~/lib/string";
 import { seekTo } from "~/lib/spotify/player";
@@ -126,10 +126,11 @@ function LeadRenderer(props: LeadRendererProps) {
   // Deterministic random from palette — same syllable always gets same color
   const randomTrackColor = (seed: string) => {
     const c = trackColors();
-    const colors = [c.LIGHT_VIBRANT, c.VIBRANT_NON_ALARMING, c.DESATURATED];
+    const colors = [c.lightVibrant, c.vibrantNonAlarming, c.desaturated];
     const r = seededRandom(seed);
     const idx = r < 0.50 ? 0 : r < 0.80 ? 1 : 2;
-    return colors[idx].replace(/^rgb\(/, "").replace(/\)$/, "");
+    const { r: red, g: green, b: blue } = hexToRgb(colors[idx]);
+    return `${red} ${green} ${blue}`;
   };
 
   // Match spicy-card: update targets only on state change
@@ -202,9 +203,9 @@ function LeadRenderer(props: LeadRendererProps) {
     let glowColor = "255 255 255";
     if (!showTint) {
       const c = trackColors();
-      const accent = c.LIGHT_VIBRANT || c.VIBRANT_NON_ALARMING;
+      const accent = c.lightVibrant || c.vibrantNonAlarming;
       if (accent) {
-        const [r, g, b] = accent.split(",").map(Number);
+        const { r, g, b } = hexToRgb(accent);
         const mix = 0.20;
         glowColor = `${Math.round(r * mix + 255 * (1 - mix))} ${Math.round(g * mix + 255 * (1 - mix))} ${Math.round(b * mix + 255 * (1 - mix))}`;
       }

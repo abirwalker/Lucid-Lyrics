@@ -139,12 +139,12 @@ export const $shuffle_state = computed($player_states, (raw) => {
 export const $liked_state = computed($player_states, (e) => e.liked);
 
 // Album art extracted colors for glow tinting
-export type { TrackColors };
+export type { AccentPalette as TrackColors } from "~/lib/colorExtract";
 
 export const $track_colors = atom<TrackColors>({
-  LIGHT_VIBRANT: "180, 180, 180",
-  VIBRANT_NON_ALARMING: "150, 150, 150",
-  DESATURATED: "120, 120, 120",
+  lightVibrant: "#b4b4b4",
+  vibrantNonAlarming: "#969696",
+  desaturated: "#787878",
 });
 
 onMount($track_colors, () => {
